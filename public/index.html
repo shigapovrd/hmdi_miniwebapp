@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>InstantHelp Mini App</title>
+    <meta charset="UTF-8">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background: #f9f9f9; }
+        textarea, button { width: 100%; margin-top: 10px; padding: 10px; font-size: 16px; }
+        #result { margin-top: 15px; background: #e0f2f1; padding: 10px; border-radius: 8px; }
+    </style>
+</head>
+<body>
+	<img src="logo.jpg" alt="InstantHelp logo" />
+    <h3>Нужна помощь? Опиши проблему:</h3>
+    <textarea id="desc" rows="4" placeholder="Например: не включается ноутбук..."></textarea>
+    <button onclick="send()">Отправить</button>
+    <div id="result" style="display:none;"></div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+
+        function send() {
+            fetch("https://hmdi-api.onrender.com/request-help", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({
+                    user: tg.initDataUnsafe.user,
+                    description: document.getElementById("desc").value
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                const result = document.getElementById("result");
+                result.style.display = "block";
+                result.innerText = "ID: " + data.ticket_id + "\n" + data.message;
+            })
+            .catch(e => alert("Ошибка: " + e));
+        }
+    </script>
+</body>
+</html>
