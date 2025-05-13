@@ -8,17 +8,14 @@
 </head>
 <body>
     <div class="container my-3 text-center">
-        <!-- Кнопки для переключения -->
         <button class="btn btn-secondary me-2" onclick="showHelp()">Нужна помощь</button>
         <button class="btn btn-secondary" onclick="showHelpOffer()">Готов помочь</button>
     </div>
 
-    <!-- Контейнер для запроса помощи -->
     <div id="helpContainer" class="container my-4" style="display:none;">
         <h3>Нужна помощь? Опиши проблему:</h3>
         <textarea id="desc" class="form-control" rows="4" placeholder="Например: не включается ноутбук..."></textarea>
         <button class="btn btn-primary mt-3" onclick="send()">Отправить</button>
-        <!-- Индикатор загрузки -->
         <div id="loadingHelp" class="mt-3" style="display:none;">
             <div class="spinner-border text-primary" role="status">
                 <span class="visually-hidden">Загрузка...</span>
@@ -27,12 +24,18 @@
         <div id="result" class="mt-3" style="display:none; white-space: pre-wrap;"></div>
     </div>
 
-    <!-- Контейнер для предложения помощи -->
     <div id="offerContainer" class="container my-4" style="display:none;">
         <h3>Готов помочь? Опиши, чем можете помочь:</h3>
         <textarea id="offerDesc" class="form-control" rows="4" placeholder="Например: могу помочь с настройкой..."></textarea>
         <button class="btn btn-success mt-3" onclick="offerHelp()">Отправить предложение</button>
         <div id="offerResult" class="mt-3" style="display:none; white-space: pre-wrap;"></div>
+        
+        <div class="mt-4">
+            <h4>Заявки о помощи</h4>
+            <div id="helpRequests" class="list-group">
+                <!-- Здесь будут появляться заявки -->
+            </div>
+        </div>
     </div>
 
     <script>
@@ -47,12 +50,11 @@
         function showHelpOffer() {
             document.getElementById('helpContainer').style.display = 'none';
             document.getElementById('offerContainer').style.display = 'block';
+            loadHelpRequests();
         }
 
         function send() {
-            // Показываем индикатор ожидания
             document.getElementById('loadingHelp').style.display = 'block';
-            // Очищаем результат
             document.getElementById('result').style.display = 'none';
 
             fetch("https://hmdi-api.onrender.com/request-help", {
@@ -65,9 +67,7 @@
             })
             .then(res => res.json())
             .then(data => {
-                // Скрываем индикатор
                 document.getElementById('loadingHelp').style.display = 'none';
-                // Показываем результат
                 const result = document.getElementById("result");
                 result.style.display = "block";
                 result.innerText = data.message;
@@ -90,10 +90,43 @@
             .then(res => res.json())
             .then(data => {
                 const result = document.getElementById("offerResult");
-                result.style.display = "block";
+                result.style.display = 'block';
                 result.innerText = data.message;
             })
             .catch(e => alert("Ошибка: " + e));
+        }
+
+        function loadHelpRequests() {
+            fetch("https://hmdi-api.onrender.com/get-help-requests")
+                .then(res => res.json())
+                .then(data => {
+                    const container = document.getElementById('helpRequests');
+                    container.innerHTML = '';
+                    if (data.requests && data.requests.length > 0) {
+                        data.requests.forEach(request => {
+                            const item = document.createElement('div');
+                            item.className = 'list-group-item list-group-item-action flex-column align-items-start';
+
+                            const header = document.createElement('div');
+                            header.className = 'd-flex w-100 justify-content-between';
+
+                            const description = document.createElement('p');
+                            description.className = 'mb-1';
+                            description.innerText = request.description;
+
+                            item.appendChild(header);
+                            item.appendChild(description);
+
+                            container.appendChild(item);
+                        });
+                    } else {
+                        container.innerHTML = '<p>Нет текущих заявок.</p>';
+                    }
+                })
+                .catch(e => {
+                    console.error('Ошибка при загрузке заявок:', e);
+                    document.getElementById('helpRequests').innerHTML = '<p>Ошибка при загрузке заявок.</p>';
+                });
         }
     </script>
 </body>
