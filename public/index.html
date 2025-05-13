@@ -1,19 +1,21 @@
 <!DOCTYPE html>
 <html>
+
 <head>
-    <title>InstantHelp Mini App</title>
+    <title>Help Me Do It</title>
     <meta charset="UTF-8" />
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"/>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
 </head>
+
 <body>
     <div class="container my-3 text-center">
         <button class="btn btn-secondary me-2" onclick="showHelp()">Нужна помощь</button>
-        <button class="btn btn-secondary" onclick="showHelpOffer()">Готов помочь</button>
+        <button class="btn btn-secondary" onclick="showHelpOffer()">Готовы помочь</button>
     </div>
 
     <div id="helpContainer" class="container my-4" style="display:none;">
-        <h3>Нужна помощь? Опиши проблему:</h3>
+        <h3>Нужна помощь? Опишите проблему:</h3>
         <textarea id="desc" class="form-control" rows="4" placeholder="Например: не включается ноутбук..."></textarea>
         <button class="btn btn-primary mt-3" onclick="send()">Отправить</button>
         <div id="loadingHelp" class="mt-3" style="display:none;">
@@ -24,14 +26,24 @@
         <div id="result" class="mt-3" style="display:none; white-space: pre-wrap;"></div>
     </div>
 
+    <div id="selectedRequest" class="card mb-3" style="display:none;">
+        <div class="card-body">
+            <h5 class="card-title">Детали заявки</h5>
+            <p class="card-text" id="selectedRequestDesc"></p>
+            <button class="btn btn-primary" onclick="respondToRequest()">Откликнуться</button>
+            <button class="btn btn-secondary" onclick="closeRequestCard()">Закрыть</button>
+        </div>
+    </div>
+
     <div id="offerContainer" class="container my-4" style="display:none;">
-        <h3>Готов помочь? Опиши, чем можете помочь:</h3>
-        <textarea id="offerDesc" class="form-control" rows="4" placeholder="Например: могу помочь с настройкой..."></textarea>
-        <button class="btn btn-success mt-3" onclick="offerHelp()">Отправить предложение</button>
-        <div id="offerResult" class="mt-3" style="display:none; white-space: pre-wrap;"></div>
-        
         <div class="mt-4">
-            <h4>Заявки о помощи</h4>
+            <h4>Нужна помощь:</h4>
+            <div id="loadingRequests" class="text-center mb-3" style="display:none;">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Загрузка заявок...</span>
+                </div>
+                <div>Загрузка заявок...</div>
+            </div>
             <div id="helpRequests" class="list-group">
                 <!-- Здесь будут появляться заявки -->
             </div>
@@ -47,10 +59,14 @@
             document.getElementById('offerContainer').style.display = 'none';
         }
 
+        let isLoading = false;
+
         function showHelpOffer() {
             document.getElementById('helpContainer').style.display = 'none';
             document.getElementById('offerContainer').style.display = 'block';
-            loadHelpRequests();
+            if (!isLoading) {
+                loadHelpRequests();
+            }
         }
 
         function send() {
@@ -59,52 +75,96 @@
 
             fetch("https://hmdi-api.onrender.com/request-help", {
                 method: "POST",
-                headers: {"Content-Type": "application/json"},
+                headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     user: tg.initDataUnsafe.user,
                     description: document.getElementById("desc").value
                 })
             })
-            .then(res => res.json())
-            .then(data => {
-                document.getElementById('loadingHelp').style.display = 'none';
-                const result = document.getElementById("result");
-                result.style.display = "block";
-                result.innerText = data.message;
-            })
-            .catch(e => {
-                document.getElementById('loadingHelp').style.display = 'none';
-                alert("Ошибка: " + e);
-            });
+                .then(res => res.json())
+                .then(data => {
+                    document.getElementById('loadingHelp').style.display = 'none';
+                    const result = document.getElementById("result");
+                    result.style.display = "block";
+                    result.innerText = data.message;
+                })
+                .catch(e => {
+                    document.getElementById('loadingHelp').style.display = 'none';
+                    alert("Ошибка: " + e);
+                });
         }
 
         function offerHelp() {
             fetch("https://hmdi-api.onrender.com/offer-help", {
                 method: "POST",
-                headers: {"Content-Type": "application/json"},
+                headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     user: tg.initDataUnsafe.user,
                     description: document.getElementById("offerDesc").value
                 })
             })
-            .then(res => res.json())
-            .then(data => {
-                const result = document.getElementById("offerResult");
-                result.style.display = 'block';
-                result.innerText = data.message;
-            })
-            .catch(e => alert("Ошибка: " + e));
+                .then(res => res.json())
+                .then(data => {
+                    const result = document.getElementById("offerResult");
+                    result.style.display = 'block';
+                    result.innerText = data.message;
+                })
+                .catch(e => alert("Ошибка: " + e));
+        }
+
+        let selectedRequestData = null;
+
+        function showRequestCard(request) {
+            selectedRequestData = request;
+            const cardElement = document.getElementById('selectedRequest');
+            const descElement = document.getElementById('selectedRequestDesc');
+
+            descElement.innerText = request.description;
+            cardElement.style.display = 'block';
+
+            // Плавно прокручиваем к карточке
+            cardElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        function closeRequestCard() {
+            document.getElementById('selectedRequest').style.display = 'none';
+            selectedRequestData = null;
+        }
+
+        function respondToRequest() {
+            if (!selectedRequestData) return;
+
+            // Здесь будет логика для отклика на заявку
+            //tg.showAlert(`Вы откликнулись на заявку: ${selectedRequestData.description}`);
         }
 
         function loadHelpRequests() {
+            if (isLoading) return;
+
+            const loadingEl = document.getElementById('loadingRequests');
+            const container = document.getElementById('helpRequests');
+
+            isLoading = true;
+            loadingEl.style.display = 'block';
+            container.innerHTML = '';
+            closeRequestCard();
+
             fetch("https://hmdi-api.onrender.com/get-help-requests")
-                .then(res => res.json())
+                .then(res => {
+                    if (!res.ok) {
+                        throw new Error(`HTTP error! status: ${res.status}`);
+                    }
+                    return res.json();
+                })
                 .then(data => {
-                    const container = document.getElementById('helpRequests');
-                    container.innerHTML = '';
                     if (data.requests && data.requests.length > 0) {
                         data.requests.forEach(request => {
+                            if (!request.description || request.description.trim() === '') {
+                                return;
+                            }
+
                             const item = document.createElement('div');
+                            item.style.cursor = 'pointer';
                             item.className = 'list-group-item list-group-item-action flex-column align-items-start';
 
                             const header = document.createElement('div');
@@ -116,18 +176,28 @@
 
                             item.appendChild(header);
                             item.appendChild(description);
+                            item.addEventListener('click', () => showRequestCard(request));
 
                             container.appendChild(item);
                         });
+
+                        if (container.children.length === 0) {
+                            container.innerHTML = '<div class="alert alert-info">Нет текущих заявок.</div>';
+                        }
                     } else {
-                        container.innerHTML = '<p>Нет текущих заявок.</p>';
+                        container.innerHTML = '<div class="alert alert-info">Нет текущих заявок.</div>';
                     }
                 })
                 .catch(e => {
                     console.error('Ошибка при загрузке заявок:', e);
-                    document.getElementById('helpRequests').innerHTML = '<p>Ошибка при загрузке заявок.</p>';
+                    container.innerHTML = '<div class="alert alert-danger">Ошибка при загрузке заявок. Пожалуйста, попробуйте позже.</div>';
+                })
+                .finally(() => {
+                    isLoading = false;
+                    loadingEl.style.display = 'none';
                 });
         }
     </script>
 </body>
+
 </html>
