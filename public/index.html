@@ -6,9 +6,53 @@
     <meta charset="UTF-8" />
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <script src='https://meet.jit.si/external_api.js'></script>
+    <style>
+        .action-btn {
+            width: 60px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 12px;
+            font-size: 24px;
+            transition: all 0.2s ease;
+        }
+        .action-btn:hover {
+            transform: translateY(-2px);
+        }
+        .action-btn i {
+            color: white;
+        }
+        #jitsiContainer {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1000;
+            background: white;
+        }
+        .close-video {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1001;
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 50%;
+            padding: 10px;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+    </style>
 </head>
 
 <body>
+    <div id="jitsiContainer">
+        <button class="btn-close close-video" onclick="closeVideoCall()" aria-label="Close"></button>
+    </div>
     <div class="container my-3 text-center">
         <button class="btn btn-secondary me-2" onclick="showHelp()">Нужна помощь</button>
         <button class="btn btn-secondary" onclick="showHelpOffer()">Готовы помочь</button>
@@ -26,16 +70,29 @@
         <div id="result" class="mt-3" style="display:none; white-space: pre-wrap;"></div>
     </div>
 
-    <div id="selectedRequest" class="card mb-3" style="display:none;">
-        <div class="card-body">
-            <h5 class="card-title">Детали заявки</h5>
-            <p class="card-text" id="selectedRequestDesc"></p>
-            <button class="btn btn-primary" onclick="respondToRequest()">Откликнуться</button>
-            <button class="btn btn-secondary" onclick="closeRequestCard()">Закрыть</button>
-        </div>
-    </div>
-
     <div id="offerContainer" class="container my-4" style="display:none;">
+        <div id="selectedRequest" class="card mb-3 w-100" style="display:none;">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <h5 class="card-title mb-3">Детали заявки</h5>
+                        <p class="card-text" id="selectedRequestDesc"></p>
+                    </div>
+                    <button type="button" class="btn-close" aria-label="Close" onclick="closeRequestCard()"></button>
+                </div>
+                <div class="mt-3 d-flex gap-2">
+                    <button class="btn btn-primary action-btn" onclick="respondWithTelegram()" title="Написать в Telegram">
+                        <i class="bi bi-telegram"></i>
+                    </button>
+                    <button class="btn btn-success action-btn" onclick="respondWithChat()" title="Открыть чат">
+                        <i class="bi bi-chat-dots"></i>
+                    </button>
+                    <button class="btn btn-info action-btn" onclick="respondWithVideoCall()" title="Видеозвонок">
+                        <i class="bi bi-camera-video"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
         <div class="mt-4">
             <h4>Нужна помощь:</h4>
             <div id="loadingRequests" class="text-center mb-3" style="display:none;">
@@ -44,8 +101,36 @@
                 </div>
                 <div>Загрузка заявок...</div>
             </div>
-            <div id="helpRequests" class="list-group">
-                <!-- Здесь будут появляться заявки -->
+            <div class="list-group px-0">
+                <div id="selectedRequest" class="card mb-3" style="display:none;">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <h5 class="card-title mb-3">Детали заявки</h5>
+                                <p class="card-text mb-0" id="selectedRequestDesc"></p>
+                            </div>
+                            <button type="button" class="btn-close" aria-label="Close" onclick="closeRequestCard()"></button>
+                        </div>
+                        <div class="mt-3 d-flex gap-2">
+                            <button class="btn btn-primary action-btn" onclick="respondWithTelegram()" title="Написать в Telegram">
+                                <i class="bi bi-telegram"></i>
+                            </button>
+                            <button class="btn btn-success action-btn" onclick="respondWithChat()" title="Открыть чат">
+                                <i class="bi bi-chat-dots"></i>
+                            </button>
+                            <button class="btn btn-info action-btn" onclick="respondWithVideoCall()" title="Видеозвонок">
+                                <i class="bi bi-camera-video"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-body">
+                        <div id="helpRequests">
+                            <!-- Здесь будут появляться заявки -->
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -70,28 +155,42 @@
         }
 
         function send() {
+            const description = document.getElementById("desc").value.trim();
+            
+            if (!description) {
+                const result = document.getElementById("result");
+                result.style.display = "block";
+                result.className = "alert alert-warning mt-3";
+                result.innerText = "Пожалуйста, опишите вашу проблему";
+                return;
+            }
+
             document.getElementById('loadingHelp').style.display = 'block';
             document.getElementById('result').style.display = 'none';
 
             fetch("https://hmdi-api.onrender.com/request-help", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: {"Content-Type": "application/json"},
                 body: JSON.stringify({
                     user: tg.initDataUnsafe.user,
-                    description: document.getElementById("desc").value
+                    description: description
                 })
             })
-                .then(res => res.json())
-                .then(data => {
-                    document.getElementById('loadingHelp').style.display = 'none';
-                    const result = document.getElementById("result");
-                    result.style.display = "block";
-                    result.innerText = data.message;
-                })
-                .catch(e => {
-                    document.getElementById('loadingHelp').style.display = 'none';
-                    alert("Ошибка: " + e);
-                });
+            .then(res => res.json())
+            .then(data => {
+                document.getElementById('loadingHelp').style.display = 'none';
+                const result = document.getElementById("result");
+                result.style.display = "block";
+                result.className = "alert alert-success mt-3";
+                result.innerText = data.message;
+            })
+            .catch(e => {
+                document.getElementById('loadingHelp').style.display = 'none';
+                const result = document.getElementById("result");
+                result.style.display = "block";
+                result.className = "alert alert-danger mt-3";
+                result.innerText = "Ошибка: " + e;
+            });
         }
 
         function offerHelp() {
@@ -131,11 +230,98 @@
             selectedRequestData = null;
         }
 
-        function respondToRequest() {
+        function respondWithTelegram() {
             if (!selectedRequestData) return;
+            tg.showAlert('Открываем Telegram чат...');
+            // Здесь будет логика для открытия Telegram чата
+        }
 
-            // Здесь будет логика для отклика на заявку
-            //tg.showAlert(`Вы откликнулись на заявку: ${selectedRequestData.description}`);
+        function respondWithChat() {
+            if (!selectedRequestData) return;
+            tg.showAlert('Открываем чат...');
+            // Здесь будет логика для открытия чата
+        }
+
+        let jitsiApi = null;
+
+        function respondWithVideoCall() {
+            if (!selectedRequestData) return;
+            
+            const container = document.getElementById('jitsiContainer');
+            
+            // Запрашиваем создание комнаты на бэкенде
+            fetch("https://hmdi-api.onrender.com/create-video-room", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({
+                    user: tg.initDataUnsafe.user,
+                    requestId: selectedRequestData.id, // ID заявки
+                    requestUser: selectedRequestData.userId // ID пользователя, создавшего заявку
+                })
+            })
+            .then(res => {
+                if (!res.ok) {
+                    throw new Error('Ошибка создания видеозвонка');
+                }
+                return res.json();
+            })
+            .then(data => {
+                container.style.display = 'block';
+                
+                const options = {
+                    roomName: data.roomName, // Получаем roomName с бэкенда
+                    width: '100%',
+                    height: '100%',
+                    parentNode: container,
+                    lang: 'ru',
+                    jwt: data.token, // Токен для авторизации в комнате
+                    configOverwrite: {
+                        prejoinPageEnabled: false,
+                        startWithAudioMuted: true,
+                        startWithVideoMuted: true
+                    },
+                    interfaceConfigOverwrite: {
+                        TOOLBAR_BUTTONS: [
+                            'microphone', 'camera', 'closedcaptions', 'desktop',
+                            'fullscreen', 'fodeviceselection', 'hangup', 'chat',
+                            'settings', 'raisehand', 'videoquality', 'filmstrip',
+                            'shortcuts', 'tileview'
+                        ]
+                    }
+                };
+
+                jitsiApi = new JitsiMeetExternalAPI(data.domain, options);
+                
+                jitsiApi.addEventListeners({
+                    readyToClose: () => {
+                        closeVideoCall();
+                        // Уведомляем бэкенд о завершении звонка
+                        fetch("https://hmdi-api.onrender.com/end-video-call", {
+                            method: "POST",
+                            headers: {"Content-Type": "application/json"},
+                            body: JSON.stringify({
+                                roomName: data.roomName,
+                                user: tg.initDataUnsafe.user
+                            })
+                        }).catch(console.error);
+                    },
+                    videoConferenceLeft: closeVideoCall
+                });
+
+                // Бэкенд сам отправит уведомление второму участнику
+            })
+            .catch(error => {
+                console.error('Ошибка:', error);
+                tg.showAlert('Не удалось создать видеозвонок. Попробуйте позже.');
+            });
+        }
+
+        function closeVideoCall() {
+            if (jitsiApi) {
+                jitsiApi.dispose();
+                jitsiApi = null;
+            }
+            document.getElementById('jitsiContainer').style.display = 'none';
         }
 
         function loadHelpRequests() {
