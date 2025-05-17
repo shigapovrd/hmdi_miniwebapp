@@ -172,12 +172,16 @@
                 method: "POST",
                 headers: {"Content-Type": "application/json"},
                 body: JSON.stringify({
-                    user: tg.initDataUnsafe.user,
                     description: description
                 })
             })
             .then(res => res.json())
             .then(data => {
+                // Сохраняем user_id если он был создан на сервере
+                if (data.user_id) {
+                    localStorage.setItem('hmdi_user_id', data.user_id);
+                }
+                
                 document.getElementById('loadingHelp').style.display = 'none';
                 const result = document.getElementById("result");
                 result.style.display = "block";
@@ -324,64 +328,47 @@
             document.getElementById('jitsiContainer').style.display = 'none';
         }
 
-        function loadHelpRequests() {
-            if (isLoading) return;
-
-            const loadingEl = document.getElementById('loadingRequests');
-            const container = document.getElementById('helpRequests');
-
+        async function loadHelpRequests() {
             isLoading = true;
-            loadingEl.style.display = 'block';
-            container.innerHTML = '';
-            closeRequestCard();
+            document.getElementById('loadingRequests').style.display = 'block';
+            const requestsContainer = document.getElementById('helpRequests');
+            requestsContainer.innerHTML = '';
 
-            fetch("https://hmdi-api.onrender.com/get-help-requests")
-                .then(res => {
-                    if (!res.ok) {
-                        throw new Error(`HTTP error! status: ${res.status}`);
-                    }
-                    return res.json();
-                })
-                .then(data => {
-                    if (data.requests && data.requests.length > 0) {
-                        data.requests.forEach(request => {
-                            if (!request.description || request.description.trim() === '') {
-                                return;
-                            }
-
-                            const item = document.createElement('div');
-                            item.style.cursor = 'pointer';
-                            item.className = 'list-group-item list-group-item-action flex-column align-items-start';
-
-                            const header = document.createElement('div');
-                            header.className = 'd-flex w-100 justify-content-between';
-
-                            const description = document.createElement('p');
-                            description.className = 'mb-1';
-                            description.innerText = request.description;
-
-                            item.appendChild(header);
-                            item.appendChild(description);
-                            item.addEventListener('click', () => showRequestCard(request));
-
-                            container.appendChild(item);
-                        });
-
-                        if (container.children.length === 0) {
-                            container.innerHTML = '<div class="alert alert-info">Нет текущих заявок.</div>';
-                        }
-                    } else {
-                        container.innerHTML = '<div class="alert alert-info">Нет текущих заявок.</div>';
-                    }
-                })
-                .catch(e => {
-                    console.error('Ошибка при загрузке заявок:', e);
-                    container.innerHTML = '<div class="alert alert-danger">Ошибка при загрузке заявок. Пожалуйста, попробуйте позже.</div>';
-                })
-                .finally(() => {
-                    isLoading = false;
-                    loadingEl.style.display = 'none';
-                });
+            try {
+                const response = await fetch('https://hmdi-api.onrender.com/get-help-requests');
+                const data = await response.json();
+                
+                if (data.requests && data.requests.length > 0) {
+                    data.requests.forEach(request => {
+                        const requestElement = document.createElement('div');
+                        requestElement.className = 'list-group-item list-group-item-action mb-2';
+                        requestElement.style.cursor = 'pointer';
+                        
+                        const timeString = new Date(request.created_at).toLocaleString();
+                        
+                        requestElement.innerHTML = `
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <p class="mb-1">${request.description}</p>
+                                    <small class="text-muted">Создано: ${timeString}</small>
+                                </div>
+                                <button class="btn btn-outline-primary btn-sm">Помочь</button>
+                            </div>
+                        `;
+                        
+                        requestElement.onclick = () => showRequestCard(request);
+                        requestsContainer.appendChild(requestElement);
+                    });
+                } else {
+                    requestsContainer.innerHTML = '<p class="text-center text-muted">Нет активных заявок</p>';
+                }
+            } catch (error) {
+                requestsContainer.innerHTML = '<p class="text-center text-danger">Ошибка при загрузке заявок</p>';
+                console.error('Error loading requests:', error);
+            } finally {
+                document.getElementById('loadingRequests').style.display = 'none';
+                isLoading = false;
+            }
         }
     </script>
 </body>
