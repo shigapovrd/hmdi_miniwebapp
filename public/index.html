@@ -139,6 +139,43 @@
         const tg = window.Telegram.WebApp;
         tg.expand();
 
+        // Генерация user_id при запуске
+        function generateUserId() {
+            return 'user_' + Math.random().toString(36).substr(2, 8);
+        }
+
+        // Функция для получения user_id из Telegram storage
+        async function initUserId() {
+            try {
+                const userData = await tg.CloudStorage.getItem('hmdi_user_id');
+                if (!userData) {
+                    const newUserId = generateUserId();
+                    await tg.CloudStorage.setItem('hmdi_user_id', newUserId);
+                    localStorage.setItem('hmdi_user_id', newUserId);
+                    return newUserId;
+                }
+                localStorage.setItem('hmdi_user_id', userData);
+                return userData;
+            } catch (error) {
+                console.error('Error accessing CloudStorage:', error);
+                // Fallback to localStorage if CloudStorage is not available
+                let userId = localStorage.getItem('hmdi_user_id');
+                if (!userId) {
+                    userId = generateUserId();
+                    localStorage.setItem('hmdi_user_id', userId);
+                }
+                return userId;
+            }
+        }
+
+        // Инициализация user_id при загрузке
+        initUserId().then(() => {
+            // После получения user_id можно загружать данные если нужно
+            if (document.getElementById('offerContainer').style.display !== 'none') {
+                loadHelpRequests();
+            }
+        });
+
         function showHelp() {
             document.getElementById('helpContainer').style.display = 'block';
             document.getElementById('offerContainer').style.display = 'none';
@@ -172,16 +209,12 @@
                 method: "POST",
                 headers: {"Content-Type": "application/json"},
                 body: JSON.stringify({
+                    user_id: localStorage.getItem('hmdi_user_id'),
                     description: description
                 })
             })
             .then(res => res.json())
             .then(data => {
-                // Сохраняем user_id если он был создан на сервере
-                if (data.user_id) {
-                    localStorage.setItem('hmdi_user_id', data.user_id);
-                }
-                
                 document.getElementById('loadingHelp').style.display = 'none';
                 const result = document.getElementById("result");
                 result.style.display = "block";
@@ -253,6 +286,12 @@
             
             const container = document.getElementById('jitsiContainer');
             const userId = localStorage.getItem('hmdi_user_id');
+
+            // Проверяем, не пытается ли пользователь помочь сам себе
+            if (selectedRequestData.user_id === userId) {
+                tg.showAlert('Вы не можете помогать с собственной заявкой');
+                return;
+            }
             
             // Создаем видео-комнату
             fetch("https://hmdi-api.onrender.com/create-video-room", {
@@ -270,6 +309,15 @@
                 return res.json();
             })
             .then(data => {
+                if (data.error) {
+                    if (data.status === 'self_help_forbidden') {
+                        tg.showAlert('Вы не можете помогать с собственной заявкой');
+                    } else {
+                        tg.showAlert(data.error);
+                    }
+                    return;
+                }
+
                 container.style.display = 'block';
                 
                 const options = {
@@ -360,9 +408,15 @@
             try {
                 const response = await fetch('https://hmdi-api.onrender.com/get-help-requests');
                 const data = await response.json();
+                const currentUserId = localStorage.getItem('hmdi_user_id');
                 
                 if (data.requests && data.requests.length > 0) {
                     data.requests.forEach(request => {
+                        // Пропускаем собственные заявки
+                        if (request.user_id === currentUserId) {
+                            return;
+                        }
+
                         const requestElement = document.createElement('div');
                         requestElement.className = 'list-group-item list-group-item-action mb-2';
                         requestElement.style.cursor = 'pointer';
@@ -382,6 +436,11 @@
                         requestElement.onclick = () => showRequestCard(request);
                         requestsContainer.appendChild(requestElement);
                     });
+
+                    // Если после фильтрации собственных заявок список пуст
+                    if (requestsContainer.children.length === 0) {
+                        requestsContainer.innerHTML = '<p class="text-center text-muted">Нет активных заявок от других пользователей</p>';
+                    }
                 } else {
                     requestsContainer.innerHTML = '<p class="text-center text-muted">Нет активных заявок</p>';
                 }
