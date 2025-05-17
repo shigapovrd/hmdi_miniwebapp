@@ -139,33 +139,71 @@
         const tg = window.Telegram.WebApp;
         tg.expand();
 
-        // Генерация user_id при запуске
-        function generateUserId() {
-            return 'user_' + Math.random().toString(36).substr(2, 8);
+        // Функция для хеширования строки
+        async function hashString(str) {
+            const encoder = new TextEncoder();
+            const data = encoder.encode(str);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            return hashArray.map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 8);
+        }
+
+        // Генерация user_id на основе хеша от Telegram ID
+        async function generateUserId() {
+            const telegramUser = tg.initDataUnsafe?.user;
+            if (!telegramUser?.id) {
+                console.error('Не удалось получить Telegram ID пользователя');
+                return 'user_' + Math.random().toString(36).substr(2, 8);
+            }
+            
+            // Создаем хеш от Telegram ID и случайной соли
+            const salt = Math.random().toString(36).substr(2, 8);
+            const hash = await hashString(`${telegramUser.id}_${salt}`);
+            return `user_${hash}`;
         }
 
         // Функция для получения user_id из Telegram storage
         async function initUserId() {
+            const telegramUser = tg.initDataUnsafe?.user;
+            if (!telegramUser?.id) {
+                console.error('Не удалось получить Telegram ID пользователя');
+                return generateUserId();
+            }
+
+            // Используем хеш от Telegram ID как ключ хранения
+            const storageKeyHash = await hashString(telegramUser.id.toString());
+            const storageKey = `hmdi_${storageKeyHash}`;
+            
             try {
-                const userData = await tg.CloudStorage.getItem('hmdi_user_id');
+                const userData = await tg.CloudStorage.getItem(storageKey);
                 if (!userData) {
-                    const newUserId = generateUserId();
-                    await tg.CloudStorage.setItem('hmdi_user_id', newUserId);
-                    localStorage.setItem('hmdi_user_id', newUserId);
+                    const newUserId = await generateUserId();
+                    await tg.CloudStorage.setItem(storageKey, newUserId);
+                    localStorage.setItem(storageKey, newUserId);
                     return newUserId;
                 }
-                localStorage.setItem('hmdi_user_id', userData);
+                localStorage.setItem(storageKey, userData);
                 return userData;
             } catch (error) {
                 console.error('Error accessing CloudStorage:', error);
                 // Fallback to localStorage if CloudStorage is not available
-                let userId = localStorage.getItem('hmdi_user_id');
+                let userId = localStorage.getItem(storageKey);
                 if (!userId) {
-                    userId = generateUserId();
-                    localStorage.setItem('hmdi_user_id', userId);
+                    userId = await generateUserId();
+                    localStorage.setItem(storageKey, userId);
                 }
                 return userId;
             }
+        }
+
+        // Получение текущего user_id
+        async function getCurrentUserId() {
+            const telegramUser = tg.initDataUnsafe?.user;
+            if (!telegramUser?.id) {
+                return localStorage.getItem('hmdi_user_id');
+            }
+            const storageKeyHash = await hashString(telegramUser.id.toString());
+            return localStorage.getItem(`hmdi_${storageKeyHash}`);
         }
 
         // Инициализация user_id при загрузке
@@ -191,7 +229,7 @@
             }
         }
 
-        function send() {
+        async function send() {
             const description = document.getElementById("desc").value.trim();
             
             if (!description) {
@@ -205,11 +243,13 @@
             document.getElementById('loadingHelp').style.display = 'block';
             document.getElementById('result').style.display = 'none';
 
+            const userId = await getCurrentUserId();
+            
             fetch("https://hmdi-api.onrender.com/request-help", {
                 method: "POST",
                 headers: {"Content-Type": "application/json"},
                 body: JSON.stringify({
-                    user_id: localStorage.getItem('hmdi_user_id'),
+                    user_id: userId,
                     description: description
                 })
             })
